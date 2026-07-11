@@ -184,20 +184,6 @@
   }
   .title{ text-align:center; font-weight:700; margin-bottom:8px; position:relative }
 
-  /* ★なまえ欄（隣うつしモードのみ表示） */
-  .nameField{
-    position:absolute; right:4px; top:50%;
-    transform:translateY(-50%);
-    display:inline-flex; align-items:center; gap:6px;
-    font-weight:500; font-size:13px; color:#334155;
-  }
-  .nameLine{
-    display:inline-block;
-    width:9em; height:1.6em;
-    border:1px solid #cbd5e1; border-radius:4px;
-    background:#fff;
-  }
-
   /* ─ グリッド領域 ─ */
   .gridArea{
     position:relative;
@@ -933,7 +919,7 @@ function newPageAdjacent(hand){
   const page = document.createElement('section');
   page.className = 'page single';
 
-  const sheet = makeSheet('文をうつしましょう。<span class="nameField">なまえ<span class="nameLine"></span></span>');
+  const sheet = makeSheet('うつしましょう。');
   page.appendChild(sheet);
   pagesEl.appendChild(page);
 
@@ -1107,11 +1093,19 @@ function render(){
       }
       const colModel = makeCol();
       const colCopy  = makeCol();
-      page.modelCols.appendChild(colModel);
       if (adjacent){
-        /* row-reverse なので、お手本の左隣に「書くマス」列が来る */
-        page.modelCols.appendChild(colCopy);
+        /* row-reverseなので先に追加した列が右側に来る。
+           右利き：お手本が左・書くマスがその右（書く手でお手本が隠れない）
+           左利き：お手本が右・書くマスがその左 */
+        if (hand === 'left'){
+          page.modelCols.appendChild(colModel);
+          page.modelCols.appendChild(colCopy);
+        } else {
+          page.modelCols.appendChild(colCopy);
+          page.modelCols.appendChild(colModel);
+        }
       } else {
+        page.modelCols.appendChild(colModel);
         page.copyCols.appendChild(colCopy);
       }
       page.curModelStrip = colModel;
