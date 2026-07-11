@@ -20,6 +20,8 @@
 
     /* お手本の文字色（うすさスライダーでJSが調整） */
     --inkColor: #111;
+    /* お手本の文字の太さ（輪郭線方式・JSが調整） */
+    --inkStroke: 0em;
 
     /* デフォルト：青（濃さはJSでα調整） */
     --gridColor: rgba(96,189,252,.55);
@@ -238,6 +240,7 @@
     font-size:calc(var(--cell) * 0.56);
     line-height:1;
     background:transparent; color:var(--inkColor);
+    -webkit-text-stroke: var(--inkStroke) var(--inkColor);
     font-family: var(--font-kyokasho);
 
     writing-mode: vertical-rl;
@@ -479,6 +482,12 @@
         <b id="inkVal">100%</b>
       </span>
 
+      <!-- ★お手本の文字の太さ（輪郭線方式：字形を保ったまま太らせる） -->
+      <span class="ctrl">文字の太さ
+        <input type="range" id="stroke" min="0" max="4" step="0.5" value="0">
+        <b id="strokeVal">標準</b>
+      </span>
+
       <button id="make">作成</button>
       <button class="print" id="printBtn">印刷</button>
     </div>
@@ -620,6 +629,8 @@ const crossThinVal = $('#crossThinVal');
 
 const inkEl = $('#ink');
 const inkVal = $('#inkVal');
+const strokeEl = $('#stroke');
+const strokeVal = $('#strokeVal');
 
 const printPageStyle = $('#printPageStyle');
 const printBtn = $('#printBtn');
@@ -672,6 +683,17 @@ function applyInk(){
   root.style.setProperty('--inkColor', `rgb(${g},${g},${g})`);
 }
 inkEl.addEventListener('input', applyInk);
+
+/* お手本の文字の太さ：輪郭線（text-stroke）方式
+   font-weightだと教科書体が疑似ボールドで崩れるため、
+   同色の縁取りを重ねて字形を保ったまま太らせる */
+function applyStroke(){
+  const v = parseFloat(strokeEl.value || '0');
+  strokeVal.textContent = (v === 0) ? '標準' : ('+' + v.toFixed(1));
+  /* マスの大きさに追従するようem単位（上限 v=4 → 0.04em） */
+  root.style.setProperty('--inkStroke', (v / 100) + 'em');
+}
+strokeEl.addEventListener('input', applyStroke);
 
 crossEl.addEventListener('change', ()=> applyCross());
 densityEl.addEventListener('input', ()=> applyDensity());
@@ -1256,6 +1278,7 @@ function init(){
   applyCross();
   applyDensity();
   applyInk();
+  applyStroke();
   render();
 }
 init();
