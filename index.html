@@ -1,0 +1,1264 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>視写プリントメーカー ver.4</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Klee+One:wght@400;600&family=Noto+Serif+JP:wght@500;700&display=swap" rel="stylesheet" />
+
+<style>
+  :root{
+    --cell: 52px;
+
+    /* ★線の太さを分離（枠と十字を別調整） */
+    --gridThin: 1.5px;   /* 枠線（マス） */
+    --crossThin: 0.8px;  /* 十字（点線） */
+
+    --maxw: 1120px;
+    --gap: 16px;
+
+    /* お手本の文字色（うすさスライダーでJSが調整） */
+    --inkColor: #111;
+
+    /* デフォルト：青（濃さはJSでα調整） */
+    --gridColor: rgba(96,189,252,.55);
+    --frameColor: rgba(96,189,252,.80);
+    --crossColor: rgba(96,189,252,.30);
+
+    --font-kyokasho:
+      "UD Digi Kyokasho N-R","UD Digi Kyokasho N-B",
+      "Yu Kyokasho","YuKyokasho",
+      "Hiragino Kyoiku","HGS教科書体","HG教科書体",
+      "Klee One","Noto Serif JP",
+      "Hiragino Mincho ProN","Yu Mincho","MS Mincho",serif;
+
+    /* =========================
+       位置調整（数値は “%” として解釈）
+       例：10 → 10% / -38 → -38%
+       pxの項目は “px”
+       ========================= */
+
+    /* ===== 縦書き ===== */
+    --vOpenTop: 40;
+    --vOpenRight: 12;
+
+    --vCloseBottom: 30;
+    --vCloseLeft: 12;
+
+    --vPairPuncTop: 12;
+    --vPairPuncRight: 12;
+    --vPairCloseBottom: 30;
+    --vPairCloseLeft: 12;
+
+    --vHangRight: 12;
+    --vHangBottom: -35;
+
+    --vHangCloseRight: 35;
+    --vHangCloseBottom: -30;
+
+    /* ===== 横書き ===== */
+    --hOpenLeft: 30;
+    --hOpenTop: 10;
+
+    --hCloseRight: 30;
+    --hCloseBottom: 6;
+
+    --hPairPuncLeft: 12;
+    --hPairPuncBottom: 10;
+
+    --hPairCloseRightPx: 0;
+    --hPairCloseBottomPx: 3;
+    --hPairCloseShiftPct: 22;
+
+    --hHangRight: -30;
+    --hHangBottom: 5;
+
+    --hHangCloseRight: -25;
+    --hHangCloseBottom: 6;
+
+    /* ===== 小さい字（っ・ゃ など） =====
+       縦書き → 右上（2の部屋）／横書き → 左下（3の部屋） */
+    --vSmallTop: 3;      /* 縦書き：上(%) */
+    --vSmallRight: 3;    /* 縦書き：右(%) */
+    --hSmallLeft: 3;     /* 横書き：左(%) */
+    --hSmallBottom: 5;   /* 横書き：下(%) */
+  }
+
+  *{ box-sizing:border-box }
+  body{
+    margin:0; background:#fff; color:#111;
+    font-family: var(--font-kyokasho);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+
+  /* px/mm測定用 */
+  #ruler{
+    position:absolute; left:-9999px; top:-9999px;
+    width:100mm; height:1px; overflow:hidden; visibility:hidden;
+  }
+
+  /* ─ UI ─ */
+  header{
+    max-width:var(--maxw);
+    margin:16px auto 12px; padding:0 12px;
+    display:grid; gap:10px;
+  }
+  textarea{
+    width:100%; height:120px; resize:vertical;
+    padding:10px; font-size:16px; line-height:1.6;
+    border:1px solid #e5e7eb; border-radius:10px;
+    font-family: var(--font-kyokasho);
+  }
+  .controls{ display:flex; flex-wrap:wrap; gap:10px; align-items:center }
+  .ctrl{
+    display:flex; align-items:center; gap:8px;
+    border:1px solid #e5e7eb; border-radius:999px; padding:8px 12px
+  }
+  .ctrl label{ display:inline-flex; align-items:center; gap:4px; cursor:pointer }
+  input[type="range"]{ width:220px }
+  input[type="number"]{ width:90px; padding:6px 8px; border:1px solid #e5e7eb; border-radius:8px }
+  button{ border:0; border-radius:12px; padding:10px 16px; font-size:16px; color:#fff; background:#2563eb; cursor:pointer }
+  button.print{ background:#0ea5e9 }
+
+  details.advanced{
+    border:1px solid #e5e7eb;
+    border-radius:12px;
+    padding:10px 12px;
+    background:#fafafa;
+  }
+  details.advanced summary{
+    cursor:pointer;
+    font-weight:700;
+  }
+  .advGrid{
+    margin-top:10px;
+    display:grid;
+    gap:10px;
+  }
+  .advRow{
+    display:flex;
+    flex-wrap:wrap;
+    align-items:center;
+    gap:8px;
+    padding:8px 0;
+    border-top:1px dashed #e5e7eb;
+  }
+  .advRow:first-child{ border-top:0 }
+  .tag{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    min-width:2.6em;
+    padding:.15em .55em;
+    border-radius:999px;
+    background:#eef2ff;
+    font-weight:700;
+  }
+  .hint{
+    color:#64748b;
+    font-size:12px;
+  }
+
+  /* ─ ページ ─ */
+  main#pages{ display:block }
+  .page{
+    max-width:var(--maxw);
+    margin:0 auto 24px; padding:0 12px;
+    display:grid; grid-template-columns:1fr 1fr; gap:var(--gap);
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  /* ★隣うつしモード：1枚だけの見開きなしレイアウト */
+  .page.single{ grid-template-columns:1fr; }
+  .page:not(:last-child){ break-after: page; page-break-after: always; }
+
+  /* ─ シート ─ */
+  .sheet{
+    border:3px solid var(--frameColor);
+    border-radius:10px;
+    padding:10px;
+  }
+  .title{ text-align:center; font-weight:700; margin-bottom:8px; position:relative }
+
+  /* ★なまえ欄（隣うつしモードのみ表示） */
+  .nameField{
+    position:absolute; right:4px; top:50%;
+    transform:translateY(-50%);
+    display:inline-flex; align-items:center; gap:6px;
+    font-weight:500; font-size:13px; color:#334155;
+  }
+  .nameLine{
+    display:inline-block;
+    width:9em; height:1.6em;
+    border:1px solid #cbd5e1; border-radius:4px;
+    background:#fff;
+  }
+
+  /* ─ グリッド領域 ─ */
+  .gridArea{
+    position:relative;
+    margin-left:auto;
+    border-radius:4px;
+    overflow: visible; /* ★ぶら下げ用に visible */
+  }
+
+  .gridSVG{
+    position:absolute; inset:0;
+    width:100%; height:100%; display:block; pointer-events:none;
+  }
+
+  /* ★枠線と十字の太さを別々に */
+  .gridSVG .gridMain,
+  .gridSVG .gridCross{
+    fill:none;
+    shape-rendering: crispEdges;
+    vector-effect: non-scaling-stroke;
+  }
+  .gridSVG .gridMain{
+    stroke: var(--gridColor);
+    stroke-width: var(--gridThin);
+  }
+  .gridSVG .gridCross{
+    stroke: var(--crossColor);
+    stroke-width: var(--crossThin);
+    stroke-dasharray: 2.6 3.8;
+    stroke-linecap: round;
+  }
+  body.noCross .gridSVG .gridCross{ display:none; }
+
+  /* ===== 縦書き（デフォルト） ===== */
+  .cols{ position:relative; display:flex; flex-direction:row-reverse; align-items:flex-start }
+  .col { display:flex; flex-direction:column }
+
+  .cell{
+    width:var(--cell); height:var(--cell);
+    display:flex; align-items:center; justify-content:center;
+    font-size:calc(var(--cell) * 0.56);
+    line-height:1;
+    background:transparent; color:var(--inkColor);
+    font-family: var(--font-kyokasho);
+
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    font-feature-settings: "vert" 1, "vkna" 1;
+
+    position:relative;
+  }
+
+  /* ===== 横書きモード ===== */
+  body.mode-horizontal .cols{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+  body.mode-horizontal .col{
+    flex-direction:row;
+  }
+  body.mode-horizontal .cell{
+    writing-mode: horizontal-tb;
+    text-orientation: initial;
+    font-feature-settings: normal;
+  }
+
+  /* ── 開き「／閉じ」 ── */
+  .cell .openMark,
+  .cell .closeMark{
+    position:absolute;
+    line-height:1;
+    font-size:1em;
+    pointer-events:none;
+    user-select:none;
+    writing-mode: inherit;
+    text-orientation: inherit;
+    font-feature-settings: inherit;
+  }
+
+  body.mode-vertical .cell .openMark{
+    top:   calc(var(--vOpenTop) * 1%);
+    right: calc(var(--vOpenRight) * 1%);
+  }
+  body.mode-vertical .cell .closeMark{
+    left:   calc(var(--vCloseLeft) * 1%);
+    bottom: calc(var(--vCloseBottom) * 1%);
+  }
+
+  body.mode-horizontal .cell .openMark{
+    left: calc(var(--hOpenLeft) * 1%);
+    top:  calc(var(--hOpenTop) * 1%);
+  }
+  body.mode-horizontal .cell .closeMark{
+    right:  calc(var(--hCloseRight) * 1%);
+    bottom: calc(var(--hCloseBottom) * 1%);
+  }
+
+  /* ── 小さい字（っ・ゃ など） ──
+     縦書き → 右上（2の部屋）／横書き → 左下（3の部屋） */
+  .cell .smallKana{
+    position:absolute;
+    line-height:1;
+    font-size:1em;
+    pointer-events:none;
+    user-select:none;
+    writing-mode: inherit;
+    text-orientation: inherit;
+    font-feature-settings: inherit;
+  }
+  body.mode-vertical .cell .smallKana{
+    top:   calc(var(--vSmallTop) * 1%);
+    right: calc(var(--vSmallRight) * 1%);
+  }
+  body.mode-horizontal .cell .smallKana{
+    left:   calc(var(--hSmallLeft) * 1%);
+    bottom: calc(var(--hSmallBottom) * 1%);
+  }
+
+  /* ── ぶら下げ：単体 ── */
+  body.mode-vertical .cell .hangMark{
+    position:absolute;
+    right:  calc(var(--vHangRight) * 1%);
+    bottom: calc(var(--vHangBottom) * 1%);
+    line-height:1;
+    font-size: inherit;
+    transform: translateY(calc(var(--hi, 0) * 0.42em));
+    pointer-events:none;
+    writing-mode: inherit;
+    text-orientation: inherit;
+    font-feature-settings: inherit;
+  }
+  body.mode-vertical .cell .hangMark:is([data-ch="」"], [data-ch="』"]){
+    right:  calc(var(--vHangCloseRight) * 1%);
+    bottom: calc(var(--vHangCloseBottom) * 1%);
+  }
+
+  body.mode-horizontal .cell .hangMark{
+    position:absolute;
+    right:  calc(var(--hHangRight) * 1%);
+    bottom: calc(var(--hHangBottom) * 1%);
+    line-height:1;
+    font-size: inherit;
+    transform: translateX(calc(var(--hi, 0) * 0.42em));
+    pointer-events:none;
+    writing-mode: inherit;
+    text-orientation: inherit;
+    font-feature-settings: inherit;
+  }
+  body.mode-horizontal .cell .hangMark:is([data-ch="」"], [data-ch="』"]){
+    right:  calc(var(--hHangCloseRight) * 1%);
+    bottom: calc(var(--hHangCloseBottom) * 1%);
+  }
+
+  /* ── 同マス（。/、 + 」/』） ── */
+  .cell.pair .pairPunc,
+  .cell.pair .pairClose,
+  .cell .hangPair .pairPunc,
+  .cell .hangPair .pairClose{
+    position:absolute;
+    line-height:1;
+    font-size: 1em;
+    pointer-events:none;
+    user-select:none;
+    writing-mode: inherit;
+    text-orientation: inherit;
+    font-feature-settings: inherit;
+  }
+
+  body.mode-vertical .cell.pair .pairPunc,
+  body.mode-vertical .cell .hangPair .pairPunc{
+    top:   calc(var(--vPairPuncTop) * 1%);
+    right: calc(var(--vPairPuncRight) * 1%);
+  }
+  body.mode-vertical .cell.pair .pairClose,
+  body.mode-vertical .cell .hangPair .pairClose{
+    left:   calc(var(--vPairCloseLeft) * 1%);
+    bottom: calc(var(--vPairCloseBottom) * 1%);
+  }
+
+  body.mode-horizontal .cell.pair .pairPunc,
+  body.mode-horizontal .cell .hangPair .pairPunc{
+    left:   calc(var(--hPairPuncLeft) * 1%);
+    bottom: calc(var(--hPairPuncBottom) * 1%);
+  }
+  body.mode-horizontal .cell.pair .pairClose,
+  body.mode-horizontal .cell .hangPair .pairClose{
+    right:  calc(var(--hPairCloseRightPx) * 1px);
+    bottom: calc(var(--hPairCloseBottomPx) * 1px);
+    transform: translateX(calc(var(--hPairCloseShiftPct) * 1%));
+  }
+
+  .cell .hangPair{
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+  }
+  body.mode-vertical .cell .hangPair{
+    transform:
+      translateY(38%)
+      translateY(calc(var(--hi, 0) * 0.42em));
+  }
+  body.mode-horizontal .cell .hangPair{
+    transform:
+      translateX(38%)
+      translateX(calc(var(--hi, 0) * 0.42em));
+  }
+
+  @media print{
+    header{ display:none }
+    .page{ padding:0; max-width:none; gap:var(--gap) }
+    /* ★印刷でもスライダー設定をそのまま反映（固定しない） */
+  }
+</style>
+
+<style id="printPageStyle"></style>
+</head>
+
+<body class="mode-vertical">
+  <div id="ruler" aria-hidden="true"></div>
+
+  <header>
+    <textarea id="text" placeholder="文章を入力（空白は空マス／改行は改段・改行）"></textarea>
+
+    <div class="controls">
+      <span class="ctrl">レイアウト
+        <label><input type="radio" name="layout" value="adjacent" checked>となりに書く</label>
+        <label><input type="radio" name="layout" value="separate">見開き（左右）</label>
+      </span>
+
+      <span class="ctrl">マス
+        <input type="range" id="size" min="36" max="88" value="52">
+        <b id="sizeVal">52px</b>
+      </span>
+
+      <span class="ctrl"><span id="rowsLabel">1列の行数</span>
+        <input type="number" id="rows" min="6" max="40" value="12">
+      </span>
+
+      <span class="ctrl">書字方向
+        <label><input type="radio" name="wm" value="vertical" checked>縦</label>
+        <label><input type="radio" name="wm" value="horizontal">横</label>
+      </span>
+
+      <span class="ctrl">利き手
+        <label><input type="radio" name="hand" value="right" checked>右利き</label>
+        <label><input type="radio" name="hand" value="left">左利き</label>
+      </span>
+
+      <span class="ctrl">印刷向き（A4）
+        <label><input type="radio" name="ori" value="portrait" checked>縦</label>
+        <label><input type="radio" name="ori" value="landscape">横</label>
+      </span>
+
+      <span class="ctrl">
+        <label><input type="checkbox" id="cross">点線十字</label>
+      </span>
+
+      <span class="ctrl">線の濃さ
+        <input type="range" id="density" min="30" max="100" value="70">
+        <b id="densityVal">70%</b>
+      </span>
+
+      <!-- ★枠の太さ -->
+      <span class="ctrl">枠の太さ
+        <input type="range" id="gridThin" min="0.6" max="2.6" step="0.1" value="1.5">
+        <b id="gridThinVal">1.5px</b>
+      </span>
+
+      <!-- ★十字の太さ -->
+      <span class="ctrl">十字の太さ
+        <input type="range" id="crossThin" min="0.4" max="2.2" step="0.1" value="0.8">
+        <b id="crossThinVal">0.8px</b>
+      </span>
+
+      <span class="ctrl">
+        <label><input type="checkbox" id="bw">白黒印刷</label>
+      </span>
+
+      <!-- ★お手本の文字のこさ（100%＝黒／下げるとうすいグレー＝なぞり書き用） -->
+      <span class="ctrl">お手本のこさ
+        <input type="range" id="ink" min="10" max="100" value="100">
+        <b id="inkVal">100%</b>
+      </span>
+
+      <button id="make">作成</button>
+      <button class="print" id="printBtn">印刷</button>
+    </div>
+
+    <!-- ★位置調整UI：縦書き -->
+    <details class="advanced">
+      <summary>位置調整（縦書き）</summary>
+
+      <div class="advGrid">
+        <div class="advRow">
+          <span class="tag">単体「</span>
+          上(%) <input type="number" id="vOpenTop" step="1">
+          右(%) <input type="number" id="vOpenRight" step="1">
+          <span class="hint">※単体の「（右上）</span>
+        </div>
+
+        <div class="advRow">
+          <span class="tag">単体」</span>
+          下(%) <input type="number" id="vCloseBottom" step="1">
+          左(%) <input type="number" id="vCloseLeft" step="1">
+          <span class="hint">※単体の」（左下）</span>
+        </div>
+
+        <div class="advRow">
+          <span class="tag">小さい字</span>
+          上(%) <input type="number" id="vSmallTop" step="1">
+          右(%) <input type="number" id="vSmallRight" step="1">
+          <span class="hint">※「っ」「ゃ」など（右上＝2の部屋）</span>
+        </div>
+
+        <div class="advRow">
+          <span class="tag">同マス 。</span>
+          上(%) <input type="number" id="vPairPuncTop" step="1">
+          右(%) <input type="number" id="vPairPuncRight" step="1">
+          <span class="hint">※同マス（。/、）右上</span>
+        </div>
+
+        <div class="advRow">
+          <span class="tag">同マス 」</span>
+          下(%) <input type="number" id="vPairCloseBottom" step="1">
+          左(%) <input type="number" id="vPairCloseLeft" step="1">
+          <span class="hint">※同マス（」/』）左下</span>
+        </div>
+
+        <div class="advRow">
+          <span class="tag">ぶら下げ</span>
+          右(%) <input type="number" id="vHangRight" step="1">
+          下(%) <input type="number" id="vHangBottom" step="1">
+          <span class="hint">※単体ぶら下げ（全記号共通）</span>
+        </div>
+
+        <div class="advRow">
+          <span class="tag">ぶら下げ 」</span>
+          右(%) <input type="number" id="vHangCloseRight" step="1">
+          下(%) <input type="number" id="vHangCloseBottom" step="1">
+          <span class="hint">※単体ぶら下げの「」」だけ</span>
+        </div>
+      </div>
+    </details>
+
+    <!-- ★位置調整UI：横書き -->
+    <details class="advanced">
+      <summary>位置調整（横書き）</summary>
+
+      <div class="advGrid">
+        <div class="advRow">
+          <span class="tag">単体「</span>
+          左(%) <input type="number" id="hOpenLeft" step="1">
+          上(%) <input type="number" id="hOpenTop" step="1">
+          <span class="hint">※単体の「（左上）</span>
+        </div>
+
+        <div class="advRow">
+          <span class="tag">単体」</span>
+          右(%) <input type="number" id="hCloseRight" step="1">
+          下(%) <input type="number" id="hCloseBottom" step="1">
+          <span class="hint">※単体の」（右下）</span>
+        </div>
+
+        <div class="advRow">
+          <span class="tag">小さい字</span>
+          左(%) <input type="number" id="hSmallLeft" step="1">
+          下(%) <input type="number" id="hSmallBottom" step="1">
+          <span class="hint">※「っ」「ゃ」など（左下＝3の部屋）</span>
+        </div>
+
+        <div class="advRow">
+          <span class="tag">同マス 。</span>
+          左(%) <input type="number" id="hPairPuncLeft" step="1">
+          下(%) <input type="number" id="hPairPuncBottom" step="1">
+          <span class="hint">※同マス（。/、）左下</span>
+        </div>
+
+        <div class="advRow">
+          <span class="tag">同マス 」</span>
+          右(px) <input type="number" id="hPairCloseRightPx" step="1">
+          下(px) <input type="number" id="hPairCloseBottomPx" step="1">
+          右寄せ(%) <input type="number" id="hPairCloseShiftPct" step="1">
+          <span class="hint">※同マス（」/』）右下（+ translateX）</span>
+        </div>
+
+        <div class="advRow">
+          <span class="tag">ぶら下げ</span>
+          右(%) <input type="number" id="hHangRight" step="1">
+          下(%) <input type="number" id="hHangBottom" step="1">
+          <span class="hint">※横書き単体ぶら下げ（全記号共通）</span>
+        </div>
+
+        <div class="advRow">
+          <span class="tag">ぶら下げ 」</span>
+          右(%) <input type="number" id="hHangCloseRight" step="1">
+          下(%) <input type="number" id="hHangCloseBottom" step="1">
+          <span class="hint">※横書き単体ぶら下げの「」」だけ</span>
+        </div>
+      </div>
+    </details>
+  </header>
+
+  <main id="pages"></main>
+
+<script>
+/* ===== ユーティリティ ===== */
+const $ = s => document.querySelector(s);
+const root = document.documentElement;
+const pagesEl = $('#pages');
+
+const sizeEl=$('#size'), sizeVal=$('#sizeVal');
+const rowsEl=$('#rows'), rowsLabel=$('#rowsLabel'), textEl=$('#text');
+
+const crossEl = $('#cross');
+const densityEl = $('#density');
+const densityVal = $('#densityVal');
+const bwEl = $('#bw');
+
+const gridThinEl = $('#gridThin');
+const gridThinVal = $('#gridThinVal');
+const crossThinEl = $('#crossThin');
+const crossThinVal = $('#crossThinVal');
+
+const inkEl = $('#ink');
+const inkVal = $('#inkVal');
+
+const printPageStyle = $('#printPageStyle');
+const printBtn = $('#printBtn');
+
+/* 行頭に来てほしくない（ぶら下げ対象） */
+const HANG_SET = new Set([
+  '、','。','」','』','）','】','〔','〕','〉','》','］','｝'
+]);
+
+/* 同マスにする組（。/、 + 」/』） */
+const PAIR_PUNC = new Set(['、','。']);
+const PAIR_CLOSE = new Set(['」','』']);
+
+/* 開きカギ（「『） */
+const OPEN_QUOTE = new Set(['「','『']);
+
+/* 閉じカギ（」』） */
+const CLOSE_QUOTE = new Set(['」','』']);
+
+/* 小さい字（拗音・促音）：縦＝右上(2の部屋) / 横＝左下(3の部屋) */
+const SMALL_KANA = new Set([
+  'ぁ','ぃ','ぅ','ぇ','ぉ','っ','ゃ','ゅ','ょ','ゎ','ゕ','ゖ',
+  'ァ','ィ','ゥ','ェ','ォ','ッ','ャ','ュ','ョ','ヮ','ヵ','ヶ'
+]);
+
+sizeEl.addEventListener('input', ()=>{
+  root.style.setProperty('--cell', sizeEl.value+'px');
+  sizeVal.textContent = sizeEl.value+'px';
+});
+$('#make').addEventListener('click', render);
+
+document.querySelectorAll('input[name="hand"]').forEach(el=> el.addEventListener('change', render));
+document.querySelectorAll('input[name="layout"]').forEach(el=> el.addEventListener('change', render));
+document.querySelectorAll('input[name="ori"]').forEach(el=> el.addEventListener('change', ()=>{
+  applyPrintOrientation();
+  render();
+}));
+document.querySelectorAll('input[name="wm"]').forEach(el=> el.addEventListener('change', ()=>{
+  applyWritingMode();
+  render();
+}));
+
+/* お手本の文字のこさ：100%＝黒 → 下げるほどうすいグレー（なぞり書き用） */
+function applyInk(){
+  const v = parseInt(inkEl.value || '100', 10);
+  inkVal.textContent = v + '%';
+  const t = Math.max(0, Math.min(1, v/100));
+  /* 100% → #111（ほぼ黒）／10% → かなりうすいグレー */
+  const g = Math.round(17 + (1 - t) * 210);
+  root.style.setProperty('--inkColor', `rgb(${g},${g},${g})`);
+}
+inkEl.addEventListener('input', applyInk);
+
+crossEl.addEventListener('change', ()=> applyCross());
+densityEl.addEventListener('input', ()=> applyDensity());
+bwEl.addEventListener('change', ()=> applyDensity());
+
+gridThinEl.addEventListener('input', ()=>{
+  const v = parseFloat(gridThinEl.value || '1');
+  root.style.setProperty('--gridThin', v + 'px');
+  gridThinVal.textContent = v.toFixed(1) + 'px';
+});
+crossThinEl.addEventListener('input', ()=>{
+  const v = parseFloat(crossThinEl.value || '0.8');
+  root.style.setProperty('--crossThin', v + 'px');
+  crossThinVal.textContent = v.toFixed(1) + 'px';
+});
+
+printBtn.addEventListener('click', ()=> window.print());
+
+function currentHand(){
+  const el = document.querySelector('input[name="hand"]:checked');
+  return el ? el.value : 'right';
+}
+function currentOrientation(){
+  const el = document.querySelector('input[name="ori"]:checked');
+  return el ? el.value : 'portrait';
+}
+function currentWritingMode(){
+  const el = document.querySelector('input[name="wm"]:checked');
+  return el ? el.value : 'vertical';
+}
+function currentLayout(){
+  const el = document.querySelector('input[name="layout"]:checked');
+  return el ? el.value : 'adjacent';
+}
+
+/* 印刷向き（A4縦/横） */
+function applyPrintOrientation(){
+  const ori = currentOrientation();
+  printPageStyle.textContent = `
+@media print{
+  @page { size: ${ori === 'landscape' ? 'A4 landscape' : 'A4'}; margin: 10mm; }
+}`;
+}
+
+/* 点線十字 ON/OFF */
+function applyCross(){
+  document.body.classList.toggle('noCross', !crossEl.checked);
+}
+
+/* 書字方向（縦/横） */
+function applyWritingMode(){
+  const wm = currentWritingMode();
+  document.body.classList.toggle('mode-horizontal', wm === 'horizontal');
+  document.body.classList.toggle('mode-vertical', wm !== 'horizontal');
+  rowsLabel.textContent = (wm === 'horizontal') ? '1行の文字数' : '1列の行数';
+}
+
+/* 線の濃さ（青ベース／白黒印刷ON時は黒） */
+function applyDensity(){
+  const v = parseInt(densityEl.value || '70', 10);
+  densityVal.textContent = v + '%';
+  const t = Math.max(0, Math.min(1, v/100));
+
+  const base = bwEl.checked ? {r:0,g:0,b:0} : {r:96,g:189,b:252};
+
+  const gridA  = (0.18 + 0.72*t);
+  const frameA = Math.min(1, gridA + 0.10);
+  const crossA = gridA * 0.55;
+
+  root.style.setProperty('--gridColor',  `rgba(${base.r},${base.g},${base.b},${gridA.toFixed(3)})`);
+  root.style.setProperty('--frameColor', `rgba(${base.r},${base.g},${base.b},${frameA.toFixed(3)})`);
+  root.style.setProperty('--crossColor', `rgba(${base.r},${base.g},${base.b},${crossA.toFixed(3)})`);
+}
+
+/* 印刷幅/高さ推定 */
+function pxPerMm(){
+  const ruler = $('#ruler');
+  const w = ruler.getBoundingClientRect().width;
+  return w / 100;
+}
+function estimatePrintableSizePx(){
+  const ori = currentOrientation();
+  const pageWmm = (ori === 'landscape') ? 297 : 210;
+  const pageHmm = (ori === 'landscape') ? 210 : 297;
+  const marginMm = 10;
+  const ppm = pxPerMm();
+  return {
+    w: (pageWmm - 2*marginMm) * ppm,
+    h: (pageHmm - 2*marginMm) * ppm
+  };
+}
+/* full=true：1枚（隣うつし）／false：見開き半分 */
+function estimatePrintSheetClientWidthPx(borderSumPx, full = false){
+  const { w: printableWpx } = estimatePrintableSizePx();
+  const gapPx = parseFloat(getComputedStyle(root).getPropertyValue('--gap')) || 16;
+  const sheetBorderBoxWpx = full ? printableWpx : (printableWpx - gapPx) / 2;
+  return sheetBorderBoxWpx - borderSumPx;
+}
+function estimatePrintSheetClientHeightPx(borderSumPy){
+  const { h: printableHpx } = estimatePrintableSizePx();
+  const sheetBorderBoxHpx = printableHpx;
+  return sheetBorderBoxHpx - borderSumPy;
+}
+
+/* 不可視文字などクリーンアップ */
+function sanitizeInput(raw){
+  let s = (raw || '').normalize('NFC');
+  s = s.replace(/\r\n?/g, '\n').replace(/\t/g, ' ');
+  s = s.replace(/\p{Zs}|\u3000/gu, ' ');
+  s = s.replace(/[\p{Cc}\p{Cf}]/gu, ch => (ch === '\n' ? '\n' : ''));
+  s = s.replace(/[\uFE00-\uFE0F]|[\u{E0100}-\u{E01EF}]/gu, '');
+  s = s.replace(/\p{M}+/gu, '');
+  return s;
+}
+
+/* グラフェム分割 */
+function toGraphemes(s){
+  if (typeof Intl !== 'undefined' && Intl.Segmenter){
+    const seg = new Intl.Segmenter('ja', {granularity:'grapheme'});
+    return Array.from(seg.segment(s), x=>x.segment);
+  }
+  return Array.from(s);
+}
+
+/* ── ぶら下げ：単体 ── */
+function addHangMark(targetCell, ch){
+  if(!targetCell) return false;
+  const idx = parseInt(targetCell.dataset.hangCount || '0', 10);
+  targetCell.dataset.hangCount = String(idx + 1);
+
+  const sp = document.createElement('span');
+  sp.className = 'hangMark';
+  sp.textContent = ch;
+  sp.dataset.ch = ch;
+  sp.style.setProperty('--hi', idx);
+  targetCell.appendChild(sp);
+  return true;
+}
+
+/* ── ぶら下げ：同マス（。/、 + 」/』） ── */
+function addHangPair(targetCell, punc, close){
+  if(!targetCell) return false;
+  const idx = parseInt(targetCell.dataset.hangCount || '0', 10);
+  targetCell.dataset.hangCount = String(idx + 1);
+
+  const box = document.createElement('span');
+  box.className = 'hangPair';
+  box.style.setProperty('--hi', idx);
+
+  const a = document.createElement('span');
+  a.className = 'pairPunc';
+  a.textContent = punc;
+
+  const b = document.createElement('span');
+  b.className = 'pairClose';
+  b.textContent = close;
+
+  box.appendChild(a);
+  box.appendChild(b);
+  targetCell.appendChild(box);
+  return true;
+}
+
+/* ── DOM生成 ── */
+function makeSheet(title){
+  const sec=document.createElement('section');
+  sec.className='sheet';
+  sec.innerHTML = `
+    <div class="title">${title}</div>
+    <div class="gridArea">
+      <svg class="gridSVG" aria-hidden="true"></svg>
+      <div class="cols"></div>
+    </div>`;
+  return sec;
+}
+
+/* ===== 見開き（左右）モードのページ ===== */
+function newPageSeparate(hand){
+  const page = document.createElement('section');
+  page.className = 'page';
+
+  const leftTitle  = hand === 'left'  ? 'うつす' : 'お手本';
+  const rightTitle = hand === 'left'  ? 'お手本' : 'うつす';
+
+  const leftSheet  = makeSheet(leftTitle);
+  const rightSheet = makeSheet(rightTitle);
+  page.appendChild(leftSheet);
+  page.appendChild(rightSheet);
+  pagesEl.appendChild(page);
+
+  const leftArea  = leftSheet.querySelector('.gridArea');
+  const rightArea = rightSheet.querySelector('.gridArea');
+  const leftCols  = leftArea.querySelector('.cols');
+  const rightCols = rightArea.querySelector('.cols');
+  const leftSVG   = leftArea.querySelector('.gridSVG');
+  const rightSVG  = rightArea.querySelector('.gridSVG');
+
+  const cell = parseFloat(getComputedStyle(root).getPropertyValue('--cell')) || 52;
+
+  const cs = getComputedStyle(leftSheet);
+  const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  const borderSumX = parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth);
+  const borderSumY = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+
+  const printClientW  = estimatePrintSheetClientWidthPx(borderSumX, false);
+  const printClientH  = estimatePrintSheetClientHeightPx(borderSumY);
+
+  const titleEl = leftSheet.querySelector('.title');
+  const titleH = titleEl.getBoundingClientRect().height;
+  const titleMb = parseFloat(getComputedStyle(titleEl).marginBottom) || 0;
+  const titleTotal = titleH + titleMb;
+
+  const colsCap = Math.max(1, Math.floor((printClientW - padX) / cell));
+  const gridAvailH = Math.max(0, (printClientH - padY - titleTotal));
+  const rowsCap = Math.max(1, Math.floor(gridAvailH / cell));
+
+  const modelIsLeft = (leftTitle === 'お手本');
+  const modelArea = modelIsLeft ? leftArea : rightArea;
+  const copyArea  = modelIsLeft ? rightArea : leftArea;
+  const modelCols = modelIsLeft ? leftCols : rightCols;
+  const copyCols  = modelIsLeft ? rightCols : leftCols;
+  const modelSVG  = modelIsLeft ? leftSVG  : rightSVG;
+  const copySVG   = modelIsLeft ? rightSVG : leftSVG;
+
+  return {
+    page, hand,
+    modelArea, copyArea, modelCols, copyCols, modelSVG, copySVG,
+    colsCap, rowsCap,
+    cols:0, rows:0,
+    curModelStrip:null, curCopyStrip:null
+  };
+}
+
+/* ===== 隣うつしモードのページ（1枚・お手本の隣に書く） ===== */
+function newPageAdjacent(hand){
+  const page = document.createElement('section');
+  page.className = 'page single';
+
+  const sheet = makeSheet('文をうつしましょう。<span class="nameField">なまえ<span class="nameLine"></span></span>');
+  page.appendChild(sheet);
+  pagesEl.appendChild(page);
+
+  const area = sheet.querySelector('.gridArea');
+  const cols = area.querySelector('.cols');
+  const svg  = area.querySelector('.gridSVG');
+
+  const cell = parseFloat(getComputedStyle(root).getPropertyValue('--cell')) || 52;
+
+  const cs = getComputedStyle(sheet);
+  const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+  const padY = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  const borderSumX = parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth);
+  const borderSumY = parseFloat(cs.borderTopWidth) + parseFloat(cs.borderBottomWidth);
+
+  const printClientW = estimatePrintSheetClientWidthPx(borderSumX, true);
+  const printClientH = estimatePrintSheetClientHeightPx(borderSumY);
+
+  const titleEl = sheet.querySelector('.title');
+  const titleH = titleEl.getBoundingClientRect().height;
+  const titleMb = parseFloat(getComputedStyle(titleEl).marginBottom) || 0;
+  const titleTotal = titleH + titleMb;
+
+  const colsCap = Math.max(2, Math.floor((printClientW - padX) / cell));
+  const gridAvailH = Math.max(0, (printClientH - padY - titleTotal));
+  const rowsCap = Math.max(2, Math.floor(gridAvailH / cell));
+
+  /* modelとcopyは同じシート・同じcols（列を交互に並べる） */
+  return {
+    page, hand,
+    modelArea: area, copyArea: area,
+    modelCols: cols, copyCols: cols,
+    modelSVG: svg, copySVG: svg,
+    colsCap, rowsCap,
+    cols:0, rows:0,
+    curModelStrip:null, curCopyStrip:null
+  };
+}
+
+function newPage(hand){
+  return (currentLayout() === 'adjacent')
+    ? newPageAdjacent(hand)
+    : newPageSeparate(hand);
+}
+
+function makeCol(){ const d=document.createElement('div'); d.className='col'; return d; }
+
+function makeCell(text=''){
+  const d = document.createElement('div');
+  d.className = 'cell';
+
+  if (text && OPEN_QUOTE.has(text)){
+    const sp = document.createElement('span');
+    sp.className = 'openMark';
+    sp.textContent = text;
+    d.appendChild(sp);
+    return d;
+  }
+
+  if (text && CLOSE_QUOTE.has(text)){
+    const sp = document.createElement('span');
+    sp.className = 'closeMark';
+    sp.textContent = text;
+    d.appendChild(sp);
+    return d;
+  }
+
+  /* ★小さい字（っ・ゃ など）→ 部屋へ配置 */
+  if (text && SMALL_KANA.has(text)){
+    const sp = document.createElement('span');
+    sp.className = 'smallKana';
+    sp.textContent = text;
+    d.appendChild(sp);
+    return d;
+  }
+
+  d.textContent = text;
+  return d;
+}
+
+const isDisplaySpace = ch => ch === ' ';
+
+/* グリッド描画 */
+function drawGrid(svg, cols, rows, cell){
+  const w = Math.round(cols * cell), h = Math.round(rows * cell);
+  const half = 0.5;
+
+  svg.setAttribute('viewBox', `${-half} ${-half} ${w + 1} ${h + 1}`);
+  svg.setAttribute('width', w);
+  svg.setAttribute('height', h);
+
+  let dMain = '';
+  for (let x=0; x<=w; x+=cell){ dMain += `M${x} 0V${h}`; }
+  for (let y=0; y<=h; y+=cell){ dMain += `M0 ${y}H${w}`; }
+
+  let dCross = '';
+  const halfCell = cell/2;
+  for (let x=halfCell; x<w; x+=cell){ dCross += `M${x} 0V${h}`; }
+  for (let y=halfCell; y<h; y+=cell){ dCross += `M0 ${y}H${w}`; }
+
+  let pMain = svg.querySelector('path.gridMain');
+  if(!pMain){
+    pMain = document.createElementNS('http://www.w3.org/2000/svg','path');
+    pMain.setAttribute('class','gridMain');
+    svg.appendChild(pMain);
+  }
+  pMain.setAttribute('d', dMain);
+
+  let pCross = svg.querySelector('path.gridCross');
+  if(!pCross){
+    pCross = document.createElementNS('http://www.w3.org/2000/svg','path');
+    pCross.setAttribute('class','gridCross');
+    svg.appendChild(pCross);
+  }
+  pCross.setAttribute('d', dCross);
+}
+
+/* 同マスセル（。/、 + 」/』） */
+function makePairCell(punc, close){
+  const d = document.createElement('div');
+  d.className = 'cell pair';
+
+  const a = document.createElement('span');
+  a.className = 'pairPunc';
+  a.textContent = punc;
+
+  const b = document.createElement('span');
+  b.className = 'pairClose';
+  b.textContent = close;
+
+  d.appendChild(a);
+  d.appendChild(b);
+  return d;
+}
+
+/* ===== メイン描画 ===== */
+function render(){
+  pagesEl.innerHTML = '';
+
+  const cell = parseFloat(getComputedStyle(root).getPropertyValue('--cell')) || 52;
+  const n = Math.max(1, parseInt(rowsEl.value || '12', 10));
+  const hand = currentHand();
+  const wm = currentWritingMode();
+  const adjacent = (currentLayout() === 'adjacent');
+  const per = adjacent ? 2 : 1; /* 1文字列あたりに使う列（行）数 */
+
+  const sanitized = sanitizeInput(textEl.value);
+  const units = toGraphemes(sanitized);
+
+  let page = newPage(hand);
+  let lastModelCell = null;
+
+  if (wm === 'vertical'){
+    page.modelArea.style.height = page.copyArea.style.height = (n * cell) + 'px';
+  }else{
+    page.modelArea.style.width  = page.copyArea.style.width  = (n * cell) + 'px';
+  }
+
+  let r = 0;
+  let c = 0;
+
+  let needStrip = false;
+
+  function openStrip(){
+    if (wm === 'vertical'){
+      if (page.cols > 0 && page.cols + per > page.colsCap){
+        page = newPage(hand);
+        lastModelCell = null;
+        page.modelArea.style.height = page.copyArea.style.height = (n * cell) + 'px';
+        r = 0;
+      }
+      const colModel = makeCol();
+      const colCopy  = makeCol();
+      page.modelCols.appendChild(colModel);
+      if (adjacent){
+        /* row-reverse なので、お手本の左隣に「書くマス」列が来る */
+        page.modelCols.appendChild(colCopy);
+      } else {
+        page.copyCols.appendChild(colCopy);
+      }
+      page.curModelStrip = colModel;
+      page.curCopyStrip  = colCopy;
+      page.cols += per;
+
+      const w = (page.cols * cell) + 'px';
+      page.modelArea.style.width = w;
+      page.copyArea.style.width  = w;
+
+      drawGrid(page.modelSVG, page.cols, n, cell);
+      if (!adjacent) drawGrid(page.copySVG, page.cols, n, cell);
+    } else {
+      if (page.rows > 0 && page.rows + per > page.rowsCap){
+        page = newPage(hand);
+        lastModelCell = null;
+        page.modelArea.style.width  = page.copyArea.style.width  = (n * cell) + 'px';
+        c = 0;
+      }
+      const rowModel = makeCol();
+      const rowCopy  = makeCol();
+      page.modelCols.appendChild(rowModel);
+      if (adjacent){
+        /* お手本行のすぐ下に「書くマス」行が来る */
+        page.modelCols.appendChild(rowCopy);
+      } else {
+        page.copyCols.appendChild(rowCopy);
+      }
+      page.curModelStrip = rowModel;
+      page.curCopyStrip  = rowCopy;
+      page.rows += per;
+
+      const h = (page.rows * cell) + 'px';
+      page.modelArea.style.height = h;
+      page.copyArea.style.height  = h;
+
+      drawGrid(page.modelSVG, n, page.rows, cell);
+      if (!adjacent) drawGrid(page.copySVG, n, page.rows, cell);
+    }
+  }
+
+  openStrip();
+
+  for (let i=0; i<units.length; i++){
+    const u = units[i];
+    const next = units[i+1];
+
+    if (u === '\n'){
+      if (wm === 'vertical'){ r = 0; }
+      else { c = 0; }
+      needStrip = true;
+      continue;
+    }
+
+    const atLineHead = (wm === 'vertical') ? (r === 0) : (c === 0);
+
+    if (atLineHead && lastModelCell){
+      if (PAIR_PUNC.has(u) && PAIR_CLOSE.has(next)){
+        addHangPair(lastModelCell, u, next);
+        i++;
+        continue;
+      }
+      if (HANG_SET.has(u)){
+        addHangMark(lastModelCell, u);
+        continue;
+      }
+    }
+
+    if (needStrip){
+      openStrip();
+      needStrip = false;
+    }
+
+    const modelStrip = page.curModelStrip;
+    const copyStrip  = page.curCopyStrip;
+
+    if (PAIR_PUNC.has(u) && PAIR_CLOSE.has(next)){
+      const mCell = makePairCell(u, next);
+      modelStrip.appendChild(mCell);
+      copyStrip.appendChild(makeCell(''));
+
+      lastModelCell = mCell;
+      i++;
+
+      if (wm === 'vertical'){
+        r++;
+        if (r >= n){ r = 0; needStrip = true; }
+      } else {
+        c++;
+        if (c >= n){ c = 0; needStrip = true; }
+      }
+      continue;
+    }
+
+    const mCell = makeCell(isDisplaySpace(u) ? '' : u);
+    modelStrip.appendChild(mCell);
+    copyStrip.appendChild(makeCell(''));
+
+    lastModelCell = mCell;
+
+    if (wm === 'vertical'){
+      r++;
+      if (r >= n){ r = 0; needStrip = true; }
+    } else {
+      c++;
+      if (c >= n){ c = 0; needStrip = true; }
+    }
+  }
+}
+
+/* ===== 位置調整UI：CSS変数をその場で更新 ===== */
+const VAR_IDS = [
+  'vOpenTop','vOpenRight',
+  'vCloseBottom','vCloseLeft',
+  'vSmallTop','vSmallRight',
+  'vPairPuncTop','vPairPuncRight',
+  'vPairCloseBottom','vPairCloseLeft',
+  'vHangRight','vHangBottom',
+  'vHangCloseRight','vHangCloseBottom',
+  'hOpenLeft','hOpenTop',
+  'hCloseRight','hCloseBottom',
+  'hSmallLeft','hSmallBottom',
+  'hPairPuncLeft','hPairPuncBottom',
+  'hPairCloseRightPx','hPairCloseBottomPx','hPairCloseShiftPct',
+  'hHangRight','hHangBottom',
+  'hHangCloseRight','hHangCloseBottom',
+];
+
+function getVarNum(name){
+  const v = getComputedStyle(root).getPropertyValue('--' + name).trim();
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : 0;
+}
+function setVarNum(name, val){
+  root.style.setProperty('--' + name, String(val));
+}
+function bindVarInput(id){
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.value = getVarNum(id);
+  el.addEventListener('input', ()=>{
+    setVarNum(id, el.value);
+  });
+}
+
+/* ===== 初期化 ===== */
+function init(){
+  VAR_IDS.forEach(bindVarInput);
+
+  root.style.setProperty('--cell', sizeEl.value + 'px');
+  sizeVal.textContent = sizeEl.value + 'px';
+
+  // ★太さ初期反映
+  const gv = parseFloat(gridThinEl.value || '1.0');
+  root.style.setProperty('--gridThin', gv + 'px');
+  gridThinVal.textContent = gv.toFixed(1) + 'px';
+
+  const cv = parseFloat(crossThinEl.value || '0.8');
+  root.style.setProperty('--crossThin', cv + 'px');
+  crossThinVal.textContent = cv.toFixed(1) + 'px';
+
+  applyPrintOrientation();
+  applyWritingMode();
+  applyCross();
+  applyDensity();
+  applyInk();
+  render();
+}
+init();
+</script>
+</body>
+</html>
